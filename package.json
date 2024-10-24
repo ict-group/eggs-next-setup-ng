@@ -22,19 +22,21 @@
     "cross-spawn": "^7.0.3",
     "execa": "^9.4.1",
     "keycloak-angular": "^16.0.1",
-    "keycloak-js": "^26.0.1",
+    "keycloak-js": "^26.0.2",
     "node-fetch": "^3.3.2",
     "primeflex": "^3.3.1",
     "primeng": "^17.18.11",
+    "prompts": "^2.4.2",
     "rxjs": "^7.8.1",
     "typescript": "~5.5.2"
   },
   "devDependencies": {
     "@types/jasmine": "~5.1.0",
     "@types/node": "^18.18.0",
+    "@types/prompts": "^2.4.9",
     "jasmine": "^5.0.0",
-    "rimraf": "^3.0.2",
     "node-fetch": "^3.3.2",
+    "rimraf": "^3.0.2",
     "ts-node": "^10.0.0",
     "typescript": "^5.0.0"
   }

@@ -1,5 +1,8 @@
 import { chain, externalSchematic, Rule, SchematicContext, Tree } from "@angular-devkit/schematics";
 import { execSync } from "child_process";
+import prompts from "prompts";
+import * as path from "path";
+import { from } from "rxjs";
 
 const dependenciesToCheck = [
   { name: "rxjs", version: "latest" },
@@ -11,9 +14,8 @@ const dependenciesToCheck = [
 
 async function getPeerDependencies(packageName: string, version: string): Promise<any> {
   try {
-    const fetch = (await import('node-fetch')).default;
     const response = await fetch(`https://registry.npmjs.org/${packageName}/${version}`);
-    const data = await response.json() as { peerDependencies?: Record<string, string> };
+    const data = await response.json();
     return data.peerDependencies || {};
   } catch (error) {
     console.warn(`Could not fetch peer dependencies for ${packageName}@${version}`);
@@ -23,9 +25,8 @@ async function getPeerDependencies(packageName: string, version: string): Promis
 
 async function getCompatibleVersion(packageName: string, angularVersion: string): Promise<string> {
   try {
-    const fetch = (await import('node-fetch')).default;
     const response = await fetch(`https://registry.npmjs.org/${packageName}`);
-    const data = await response.json() as { versions: Record<string, { peerDependencies?: Record<string, string> }> };
+    const data = await response.json();
     const versions = data.versions;
     const compatibleVersion = Object.keys(versions)
         .filter(v => (versions[v].peerDependencies || {})['@angular/core'] === angularVersion)
@@ -42,9 +43,11 @@ async function resolveDependencies(angularVersion: string): Promise<{ packages: 
   const compatibilityMap: Map<string, Set<string>> = new Map();
 
   for (const pkg of dependenciesToCheck) {
-    const version = pkg.version === "latest" ? await getCompatibleVersion(pkg.name, angularVersion) : pkg.version;
+    const version = await getCompatibleVersion(pkg.name, angularVersion);
     const peerDeps = await getPeerDependencies(pkg.name, version);
+
     resolvedPackages.push(`${pkg.name}@${version}`);
+
     Object.entries(peerDeps).forEach(([depName, depVersion]) => {
       if (!compatibilityMap.has(depName)) {
         compatibilityMap.set(depName, new Set());
@@ -66,38 +69,50 @@ async function resolveDependencies(angularVersion: string): Promise<{ packages: 
   return { packages: resolvedPackages, forceInstall };
 }
 
-async function runCommand(command: string, args: string[]) {
-  try {
-    execSync(`${command} ${args.join(' ')}`, { stdio: 'inherit' });
-  } catch (error) {
-    console.error(`Error executing command: ${command} ${args.join(' ')}`, error);
-    throw error;
-  }
+function runCommand(command: string, args: string[]) {
+  execSync(`${command} ${args.join(' ')}`, { stdio: 'inherit' });
 }
 
-function installDependencies(angularVersion: string): (tree: Tree, context: SchematicContext) => Promise<Tree> {
-  return async (tree: Tree) => {
-    const { packages, forceInstall } = await resolveDependencies(angularVersion);
-    const additionalArgs = forceInstall ? ['--legacy-peer-deps'] : [];
-    await runCommand('npm', ['install', ...packages, ...additionalArgs]);
-    return tree;
-  };
+function installDependenciesRule(angularVersion: string): Rule {
+  return (tree: Tree) => from(
+      (async () => {
+        const { packages, forceInstall } = await resolveDependencies(angularVersion);
+        const additionalArgs = forceInstall ? ['--legacy-peer-deps'] : [];
+        runCommand('npm', ['install', ...packages, ...additionalArgs]);
+        return tree;
+      })()
+  );
 }
 
 export function eggsNextSetup(options: any): Rule {
-  return async (_tree: Tree) => {
+  return async (_tree: Tree, _context: SchematicContext) => {
     const angularVersion = options['angular-version'] || 'latest';
     const projectName = options.name || 'my-angular-app';
+    let targetDirectory = options['target-directory'] || './';
 
-    // @ts-ignore
+    // Usa 'prompts' per chiedere la directory se non specificata
+    if (!options['target-directory']) {
+      const response = await prompts({
+        type: 'text',
+        name: 'targetDirectory',
+        message: 'Inserisci la directory di destinazione per il progetto Angular:',
+        initial: './'
+      });
+      targetDirectory = response.targetDirectory;
+    }
+
+    // Risolve il percorso completo
+    const fullPath = path.resolve(targetDirectory, projectName);
+
     return chain([
       externalSchematic('@schematics/angular', 'ng-new', {
         name: projectName,
         version: angularVersion,
         routing: true,
-        style: 'scss'
+        style: 'scss',
+        directory: fullPath
       }),
-      installDependencies(angularVersion)
+      installDependenciesRule(angularVersion)
     ]);
   };
 }
