@@ -1,6 +1,5 @@
-import axios from 'axios';
 import { chain, externalSchematic, Rule, SchematicContext, Tree } from "@angular-devkit/schematics";
-import {execa} from "execa";
+import { execSync } from "child_process";
 
 const dependenciesToCheck = [
   { name: "rxjs", version: "latest" },
@@ -12,8 +11,10 @@ const dependenciesToCheck = [
 
 async function getPeerDependencies(packageName: string, version: string): Promise<any> {
   try {
-    const response = await axios.get(`https://registry.npmjs.org/${packageName}/${version}`);
-    return response.data.peerDependencies || {};
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(`https://registry.npmjs.org/${packageName}/${version}`);
+    const data = await response.json() as { peerDependencies?: Record<string, string> };
+    return data.peerDependencies || {};
   } catch (error) {
     console.warn(`Could not fetch peer dependencies for ${packageName}@${version}`);
     return {};
@@ -22,8 +23,10 @@ async function getPeerDependencies(packageName: string, version: string): Promis
 
 async function getCompatibleVersion(packageName: string, angularVersion: string): Promise<string> {
   try {
-    const response = await axios.get(`https://registry.npmjs.org/${packageName}`);
-    const versions = response.data.versions;
+    const fetch = (await import('node-fetch')).default;
+    const response = await fetch(`https://registry.npmjs.org/${packageName}`);
+    const data = await response.json() as { versions: Record<string, { peerDependencies?: Record<string, string> }> };
+    const versions = data.versions;
     const compatibleVersion = Object.keys(versions)
         .filter(v => (versions[v].peerDependencies || {})['@angular/core'] === angularVersion)
         .sort()[0];
@@ -34,16 +37,14 @@ async function getCompatibleVersion(packageName: string, angularVersion: string)
   }
 }
 
-async function resolveDependencies(): Promise<{ packages: string[], forceInstall: boolean }> {
-  const resolvedPackages: string[] = [];
+async function resolveDependencies(angularVersion: string): Promise<{ packages: string[], forceInstall: boolean }> {
+  const resolvedPackages: string[] = [`@schematics/angular@${angularVersion}`];
   const compatibilityMap: Map<string, Set<string>> = new Map();
 
   for (const pkg of dependenciesToCheck) {
-    const version = pkg.version === "latest" ? await getCompatibleVersion(pkg.name, "latest") : pkg.version;
+    const version = pkg.version === "latest" ? await getCompatibleVersion(pkg.name, angularVersion) : pkg.version;
     const peerDeps = await getPeerDependencies(pkg.name, version);
-
     resolvedPackages.push(`${pkg.name}@${version}`);
-
     Object.entries(peerDeps).forEach(([depName, depVersion]) => {
       if (!compatibilityMap.has(depName)) {
         compatibilityMap.set(depName, new Set());
@@ -67,33 +68,26 @@ async function resolveDependencies(): Promise<{ packages: string[], forceInstall
 
 async function runCommand(command: string, args: string[]) {
   try {
-    await execa(command, args, { stdio: 'inherit' });
+    execSync(`${command} ${args.join(' ')}`, { stdio: 'inherit' });
   } catch (error) {
     console.error(`Error executing command: ${command} ${args.join(' ')}`, error);
     throw error;
   }
 }
 
-function installDependencies(): (tree: Tree, context: SchematicContext) => Promise<Tree> {
+function installDependencies(angularVersion: string): (tree: Tree, context: SchematicContext) => Promise<Tree> {
   return async (tree: Tree) => {
-    const { packages, forceInstall } = await resolveDependencies();
+    const { packages, forceInstall } = await resolveDependencies(angularVersion);
     const additionalArgs = forceInstall ? ['--legacy-peer-deps'] : [];
     await runCommand('npm', ['install', ...packages, ...additionalArgs]);
     return tree;
   };
 }
 
-async function installAngularSchematics(version: string) {
-  await runCommand('npm', ['install', `@schematics/angular@${version}`, '--legacy-peer-deps']);
-}
-
 export function eggsNextSetup(options: any): Rule {
   return async (_tree: Tree) => {
     const angularVersion = options['angular-version'] || 'latest';
     const projectName = options.name || 'my-angular-app';
-
-    // Installa @schematics/angular nella versione specificata
-    await installAngularSchematics(angularVersion);
 
     // @ts-ignore
     return chain([
@@ -103,7 +97,7 @@ export function eggsNextSetup(options: any): Rule {
         routing: true,
         style: 'scss'
       }),
-      installDependencies()
+      installDependencies(angularVersion)
     ]);
   };
 }
