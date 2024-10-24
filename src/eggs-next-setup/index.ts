@@ -2,6 +2,7 @@ import { chain, externalSchematic, Rule, SchematicContext, Tree } from "@angular
 import { execSync } from "child_process";
 import prompts from "prompts";
 import * as path from "path";
+import * as fs from "fs";
 import { from } from "rxjs";
 
 const dependenciesToCheck = [
@@ -74,14 +75,22 @@ function runCommand(command: string, args: string[]) {
 }
 
 function installDependenciesRule(angularVersion: string): Rule {
-  return (tree: Tree) => from(
-      (async () => {
-        const { packages, forceInstall } = await resolveDependencies(angularVersion);
-        const additionalArgs = forceInstall ? ['--legacy-peer-deps'] : [];
-        runCommand('npm', ['install', ...packages, ...additionalArgs]);
-        return tree;
-      })()
-  );
+  return (tree: Tree, _context: SchematicContext) => {
+    return from(
+        (async () => {
+          const { packages, forceInstall } = await resolveDependencies(angularVersion);
+          const additionalArgs = forceInstall ? ['--legacy-peer-deps'] : [];
+          runCommand('npm', ['install', ...packages, ...additionalArgs]);
+          return tree; // Restituisce il Tree per evitare errori di tipo
+        })()
+    );
+  };
+}
+
+async function createDirectoryIfNotExists(directory: string) {
+  if (!fs.existsSync(directory)) {
+    fs.mkdirSync(directory, { recursive: true });
+  }
 }
 
 export function eggsNextSetup(options: any): Rule {
@@ -90,7 +99,6 @@ export function eggsNextSetup(options: any): Rule {
     const projectName = options.name || 'my-angular-app';
     let targetDirectory = options['target-directory'] || './';
 
-    // Usa 'prompts' per chiedere la directory se non specificata
     if (!options['target-directory']) {
       const response = await prompts({
         type: 'text',
@@ -101,16 +109,16 @@ export function eggsNextSetup(options: any): Rule {
       targetDirectory = response.targetDirectory;
     }
 
-    // Risolve il percorso completo
     const fullPath = path.resolve(targetDirectory, projectName);
+    await createDirectoryIfNotExists(fullPath);
+    process.chdir(fullPath);
 
     return chain([
       externalSchematic('@schematics/angular', 'ng-new', {
         name: projectName,
         version: angularVersion,
         routing: true,
-        style: 'scss',
-        directory: fullPath
+        style: 'scss'
       }),
       installDependenciesRule(angularVersion)
     ]);
