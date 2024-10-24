@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "$id": "setup-project-schema",
+  "title": "Eggs-next angular scaffolding",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Nome del progetto Angular",
+      "default": "my-angular-app",
+      "x-prompt": "Inserisci il nome del nuovo progetto Angular:"
+    },
+    "angular-version": {
+      "type": "string",
+      "description": "Versione di Angular da usare",
+      "default": "latest",
+      "x-prompt": "Inserisci la versione di Angular da installare:"
+    }
+  }
+}
