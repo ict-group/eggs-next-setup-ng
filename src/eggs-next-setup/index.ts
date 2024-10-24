@@ -133,14 +133,6 @@ async function resolveDependencies(angularVersion: string): Promise<{ packages: 
   return { packages: resolvedPackages, forceInstall };
 }
 
-// function runCommand(command: string, args: string[]) {
-//   try {
-//     execSync(`${command} ${args.join(' ')}`, { stdio: 'inherit' });
-//   } catch (error) {
-//     console.error(`Errore durante l'esecuzione del comando: ${command} ${args.join(' ')}`);
-//     throw error;
-//   }
-// }
 
 function runCommand(command: string, args: string[], cwd?: string) {
   try {
@@ -164,9 +156,16 @@ async function setupGitRepository(projectPath: string, repoUrl: string, token: s
     execSync('git config user.name "Your Name"', { stdio: 'inherit' });
     execSync('git config user.email "your-email@example.com"', { stdio: 'inherit' });
 
-    // Aggiungi il token direttamente all'URL remoto
-    const authRepoUrl = repoUrl.replace('https://', `https://${token}@`);
-    execSync(`git remote add origin ${authRepoUrl}`, { stdio: 'inherit' });
+    // Verifica se il remote 'origin' esiste già
+    try {
+      execSync(`git remote remove origin`, { stdio: 'ignore' });
+    } catch (error) {
+      // Ignora eventuali errori se il remote non esiste
+    }
+
+    // Imposta il remote 'origin' con il token incluso
+    const remoteUrl = repoUrl.replace('https://', `https://${token}:x-oauth-basic@`);
+    execSync(`git remote add origin ${remoteUrl}`, { stdio: 'inherit' });
 
     // Aggiungi e committa solo se ci sono file da committare
     execSync('git add .', { stdio: 'inherit' });
@@ -252,20 +251,5 @@ export function eggsNextSetup(options: any): Rule {
         }
       }
     ]);
-    // return chain([
-    //   externalSchematic('@schematics/angular', 'ng-new', {
-    //     name: projectName,
-    //     version: angularVersion,
-    //     routing: true,
-    //     style: 'scss',
-    //     directory: fullPath
-    //   }),
-    //   installDependenciesRule(angularVersion),
-    //   (_tree, _context) => {
-    //     if (repoUrl) {
-    //       setupGitRepository(fullPath, repoUrl);
-    //     }
-    //   }
-    // ]);
   };
 }
