@@ -242,7 +242,7 @@ export function eggsNextSetup(options: any): Rule {
 
     return chain([
       (_tree, _context) => {
-        runCommand('npx', ['ng', 'new', projectDirName, '--version', angularVersion, '--routing', '--style', 'scss'], workingDir);
+        runCommand('npx', ['@angular/cli', 'new', projectDirName, '--version', angularVersion, '--routing', '--style', 'scss'], workingDir);
       },
       ()=> installDependenciesRule(angularVersion),
       (_tree, _context) => {
